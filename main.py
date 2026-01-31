@@ -3,7 +3,7 @@ from discord.ext import commands, tasks
 import os
 
 # BOT AYARLARI - BURAYI DÜZENLEYİN
-KINDAR_ROLE_ID = 123456789012345678  # @Kindar rol ID'sini yazın
+KINDAR_ROLE_ID = 1458803684111552603  # @Kindar rol ID'sini yazın
 
 # Bot kurulumu
 intents = discord.Intents.default()
