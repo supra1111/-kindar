@@ -1,207 +1,114 @@
 import discord
 from discord.ext import commands, tasks
 import os
-import sys
 
-print("Bot başlatılıyor...")
+# BOT AYARLARI - BURAYI DÜZENLEYİN
+KINDAR_ROLE_ID = 123456789012345678  # @Kindar rol ID'sini yazın
 
-# Bot ayarları
+# Bot kurulumu
 intents = discord.Intents.default()
 intents.members = True
 intents.presences = True
 
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
-# SABIT AYARLAR - BUNLARI DÜZENLEYİN
-KINDAR_ROLE_ID = 1458803684111552603  # @Kindar rolünün ID'sini buraya yazın
-CHECK_INTERVAL = 30  # Kontrol aralığı (saniye)
-
 # Bot hazır olduğunda
 @bot.event
 async def on_ready():
-    print(f'Bot hazır: {bot.user.name}')
-    print(f'Bot ID: {bot.user.id}')
-    print(f'Kindar rol ID: {KINDAR_ROLE_ID}')
+    print(f'✅ BOT HAZIR: {bot.user.name}')
+    print(f'👑 KINDAR ROL ID: {KINDAR_ROLE_ID}')
     
-    # Kontrolü başlat
-    if not check_kindar_status.is_running():
-        check_kindar_status.start()
-    
-    # Bot durumunu ayarla
-    await bot.change_presence(
-        activity=discord.Activity(
-            type=discord.ActivityType.watching,
-            name='"kindar" durumunu'
-        )
-    )
+    # Otomatik kontrolü başlat
+    if not check_kindar.is_running():
+        check_kindar.start()
 
-# "kindar" durumu kontrolü
-@tasks.loop(seconds=CHECK_INTERVAL)
-async def check_kindar_status():
-    try:
-        for guild in bot.guilds:
-            # Kindar rolünü bul
-            kindar_role = guild.get_role(KINDAR_ROLE_ID)
-            if not kindar_role:
-                print(f"Uyarı: {guild.name} sunucusunda Kindar rolü bulunamadı (ID: {KINDAR_ROLE_ID})")
-                continue
-            
-            for member in guild.members:
-                if member.bot or not member.activity:
-                    continue
-                
-                # Durum metnini al ve küçük harfe çevir
-                activity_text = str(member.activity.name).lower()
-                
-                # "kindar" kelimesini ara
-                if "kindar" in activity_text:
-                    # Eğer rolü yoksa ver
-                    if kindar_role not in member.roles:
-                        try:
-                            await member.add_roles(kindar_role)
-                            print(f"✅ {member.name} -> @{kindar_role.name} (Durum: {activity_text})")
-                        except discord.Forbidden:
-                            print(f"❌ {member.name} için rol verilemedi: Yetki yok")
-                        except Exception as e:
-                            print(f"❌ Hata: {e}")
-                    # Eğer rolü varsa ve durumda "kindar" yoksa rolü al (isteğe bağlı)
-                    # elif kindar_role in member.roles and "kindar" not in activity_text:
-                    #     await member.remove_roles(kindar_role)
-                    #     print(f"➖ {member.name} -> @{kindar_role.name} rolü alındı")
-                
-    except Exception as e:
-        print(f"Kontrol hatası: {e}")
-
-# Komut: Manuel kontrol
-@bot.command(name='kontrol')
-@commands.has_permissions(administrator=True)
-async def kontrol_komut(ctx):
-    """Tüm üyeleri 'kindar' durumu için kontrol eder"""
-    mesaj = await ctx.send("🔍 Kindar durumu kontrol ediliyor...")
-    
-    kindar_role = ctx.guild.get_role(KINDAR_ROLE_ID)
-    if not kindar_role:
-        await mesaj.edit(content=f"❌ Kindar rolü bulunamadı! (ID: {KINDAR_ROLE_ID})")
-        return
-    
-    eklenen = 0
-    for member in ctx.guild.members:
-        if member.bot or not member.activity:
+# Her 30 saniyede bir kontrol
+@tasks.loop(seconds=30)
+async def check_kindar():
+    for sunucu in bot.guilds:
+        # Kindar rolünü bul
+        kindar_rol = sunucu.get_role(KINDAR_ROLE_ID)
+        if not kindar_rol:
+            print(f"⚠️ {sunucu.name}: Kindar rolü yok!")
             continue
         
-        activity_text = str(member.activity.name).lower()
+        # Tüm üyeleri kontrol et
+        for uye in sunucu.members:
+            if uye.bot:  # Botları atla
+                continue
+            
+            if not uye.activity:  # Durumu yoksa atla
+                continue
+            
+            # Durum metnini al
+            durum = str(uye.activity.name).lower()
+            
+            # "kindar" kelimesini ara
+            if "kindar" in durum:
+                # Rolü yoksa ver
+                if kindar_rol not in uye.roles:
+                    try:
+                        await uye.add_roles(kindar_rol)
+                        print(f"✅ {uye.name} -> @{kindar_rol.name}")
+                    except:
+                        print(f"❌ {uye.name} için rol verilemedi")
+
+# Komut: !kontrol
+@bot.command()
+async def kontrol(ctx):
+    """Kindar durumunu kontrol eder"""
+    kindar_rol = ctx.guild.get_role(KINDAR_ROLE_ID)
+    
+    if not kindar_rol:
+        await ctx.send("❌ Kindar rolü bulunamadı!")
+        return
+    
+    sayac = 0
+    for uye in ctx.guild.members:
+        if uye.bot or not uye.activity:
+            continue
         
-        if "kindar" in activity_text and kindar_role not in member.roles:
+        durum = str(uye.activity.name).lower()
+        
+        if "kindar" in durum and kindar_rol not in uye.roles:
             try:
-                await member.add_roles(kindar_role)
-                eklenen += 1
+                await uye.add_roles(kindar_rol)
+                sayac += 1
             except:
                 pass
     
-    await mesaj.edit(content=f"✅ {eklenen} kişiye Kindar rolü verildi.")
+    await ctx.send(f"✅ {sayac} kişiye Kindar rolü verildi!")
 
-# Komut: Kullanıcı kontrolü
-@bot.command(name='kontrolet')
-@commands.has_permissions(administrator=True)
-async def kontrol_et(ctx, member: discord.Member = None):
-    """Belirli bir kullanıcının durumunu kontrol eder"""
-    if not member:
-        member = ctx.author
+# Komut: !bilgi
+@bot.command()
+async def bilgi(ctx):
+    """Bot bilgilerini gösterir"""
+    kindar_rol = ctx.guild.get_role(KINDAR_ROLE_ID)
+    rol_adi = kindar_rol.name if kindar_rol else "BULUNAMADI"
     
-    if member.bot:
-        await ctx.send("🤖 Botları kontrol etmiyorum.")
-        return
-    
-    kindar_role = ctx.guild.get_role(KINDAR_ROLE_ID)
-    if not kindar_role:
-        await ctx.send(f"❌ Kindar rolü bulunamadı! (ID: {KINDAR_ROLE_ID})")
-        return
-    
-    if not member.activity:
-        await ctx.send(f"📭 {member.mention} bir durum kullanmıyor.")
-        return
-    
-    activity_text = str(member.activity.name)
-    
-    if "kindar" in activity_text.lower():
-        if kindar_role not in member.roles:
-            try:
-                await member.add_roles(kindar_role)
-                await ctx.send(f"✅ {member.mention} 'kindar' durumunda! Rol verildi.")
-            except:
-                await ctx.send(f"❌ {member.mention} 'kindar' durumunda ama rol verilemedi.")
-        else:
-            await ctx.send(f"ℹ️ {member.mention} zaten Kindar rolüne sahip.")
-    else:
-        await ctx.send(f"❌ {member.mention} 'kindar' durumunda değil.")
+    await ctx.send(f"""
+🤖 **KINDAR BOT**
+👑 **Rol:** {rol_adi}
+🆔 **Rol ID:** {KINDAR_ROLE_ID}
+⚡ **Komut:** !kontrol
+📝 **Açıklama:** "kindar" yazanlara otomatik rol verir
+    """)
 
-# Komut: Bilgi
-@bot.command(name='bilgi')
-async def bilgi_komut(ctx):
-    """Bot hakkında bilgi verir"""
-    kindar_role = ctx.guild.get_role(KINDAR_ROLE_ID)
-    role_name = kindar_role.name if kindar_role else "Bulunamadı"
-    
-    embed = discord.Embed(
-        title="🤖 Kindar Durum Botu",
-        description="Bu bot, 'kindar' durumunu kullananlara otomatik rol verir.",
-        color=discord.Color.purple()
-    )
-    
-    embed.add_field(name="👑 Kindar Rolü", value=f"{role_name} (ID: {KINDAR_ROLE_ID})", inline=False)
-    embed.add_field(name="⏱️ Kontrol Aralığı", value=f"{CHECK_INTERVAL} saniye", inline=False)
-    embed.add_field(name="📊 Toplam Sunucu", value=str(len(bot.guilds)), inline=False)
-    
-    # Aktif "kindar" kullanıcıları say
-    if kindar_role:
-        kindar_uyeler = len(kindar_role.members)
-        embed.add_field(name="📈 Kindar Üyeler", value=str(kindar_uyeler), inline=False)
-    
-    await ctx.send(embed=embed)
+# BOTU BAŞLAT
+TOKEN = os.environ.get("DISCORD_TOKEN")
 
-# Komut: Yardım
-@bot.command(name='yardim')
-async def yardim_komut(ctx):
-    embed = discord.Embed(
-        title="❓ Yardım - Kindar Bot",
-        description="**Kullanılabilir Komutlar:**",
-        color=discord.Color.blue()
-    )
+if TOKEN:
+    print("🚀 Bot başlatılıyor...")
+    bot.run(TOKEN)
+else:
+    print("""
+❌ **HATA: TOKEN BULUNAMADI!**
     
-    komutlar = [
-        ("!kontrol", "Tüm sunucuyu 'kindar' durumu için tarar"),
-        ("!kontrolet [@kullanıcı]", "Belirli kullanıcıyı kontrol eder"),
-        ("!bilgi", "Bot hakkında bilgi verir"),
-        ("!yardim", "Bu mesajı gösterir")
-    ]
-    
-    for komut, aciklama in komutlar:
-        embed.add_field(name=komut, value=aciklama, inline=False)
-    
-    embed.set_footer(text="Yalnızca 'kindar' durumunu kontrol eder")
-    await ctx.send(embed=embed)
-
-# Hata yönetimi
-@bot.event
-async def on_command_error(ctx, error):
-    if isinstance(error, commands.MissingPermissions):
-        await ctx.send("❌ Bu komut için yönetici izni gerekiyor.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"❌ Eksik parametre! `{ctx.prefix}{ctx.command.name} {ctx.command.signature}`")
-    elif isinstance(error, commands.BadArgument):
-        await ctx.send("❌ Geçersiz kullanıcı! @etiket şeklinde belirtin.")
-    else:
-        print(f"Hata: {error}")
-
-# Botu başlat
-if __name__ == "__main__":
-    TOKEN = os.environ.get("DISCORD_TOKEN")
-    
-    if TOKEN:
-        print("Token bulundu, bot başlatılıyor...")
-        bot.run(TOKEN)
-    else:
-        print("HATA: DISCORD_TOKEN bulunamadı!")
-        print("Railway'de Environment Variables ekleyin:")
-        print("Name: DISCORD_TOKEN")
-        print("Value: bot_tokeniniz")
+Railway'de şu adımları takip edin:
+1. Proje ayarlarına gir
+2. "Variables" sekmesine tıkla
+3. "New Variable" butonuna tıkla
+4. Name: DISCORD_TOKEN
+5. Value: bot_tokeniniz
+6. Deploy et
+    """)
